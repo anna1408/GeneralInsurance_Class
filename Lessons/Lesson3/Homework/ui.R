@@ -4,11 +4,6 @@ data_KPI_povodne <- read.csv("C:\\GeneralInsurance_Class\\Data\\lesson2_KPI.csv"
 data_KPI <- data_KPI_povodne %>% filter_all(all_vars(!is.na(.)))
 
 
-
-data_KPI <- read.csv("C:\\GeneralInsurance_Class\\Data\\lesson2_KPI.csv")
-
-
-
 ui <- fluidPage(
   titlePanel("Scatter plot with colour"),
   
