@@ -15,6 +15,7 @@ There are far more questions and answers available, and there are many methods t
 at least the basics.
 
 
+
 ### What is a triangle
 As losses take sometimes a number of years to be reported and then some more years to be paid, it is very hard
 to say at the end of the year whether we have "saved" enough money. For this reason, it makes sense to keep history
