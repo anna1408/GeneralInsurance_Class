@@ -1,0 +1,139 @@
+---
+title: "du5"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+dt_Policy <- read.csv("C:\\GeneralInsurance_Class\\Data\\lesson5_PolicyHistory.csv")%>% distinct(NrPolicy, NrObject, .keep_all = TRUE) 
+dt_Policy %>% nrow()
+dt_Policy %>% distinct(NrPolicy, NrObject) %>% nrow() 
+
+
+dt_Claims <- read.csv("C:\\GeneralInsurance_Class\\Data\\lesson5_Claims.csv")%>% distinct(NrClaim, .keep_all = TRUE)
+dt_Claims %>% nrow()
+dt_Claims %>% distinct(NrClaim) %>% nrow()
+
+
+dt_pol_w_claims <- left_join(dt_Policy, 
+                             dt_Claims, 
+                             by = c("NrPolicy", "NrObject")
+                    )
+head(dt_pol_w_claims)
+
+library(lubridate)
+dt_pol_w_claims <- 
+  dt_pol_w_claims %>% mutate(Time_Exposure = lubridate::dmy(Dt_Exp_End) - lubridate::dmy(Dt_Exp_Start))
+
+dt_pol_w_claims %>% 
+  filter(!is.na(Paid)) %>% 
+  select(Paid, Dt_Exp_Start, Dt_Exp_End, Time_Exposure)  %>% 
+  arrange(desc(Paid)) %>% head()
+
+
+
+
+dt_pol_w_claims <- 
+  dt_pol_w_claims %>% 
+  mutate(Ult_Loss = Paid + Reserves,
+         Burning_Cost = ifelse(is.na(Ult_Loss), 0,  Ult_Loss / as.integer(Time_Exposure))
+  )
+
+dt_pol_w_claims %>% 
+  filter(!is.na(Paid)) %>% 
+  select(Paid, Reserves, Ult_Loss, Burning_Cost) %>% head()
+```
+
+```{r}
+summary(dt_pol_w_claims)
+```
+
+na zaklade summary z dat som sa pozrela, co vsetko obsahuju a ktore "features" by sa zmysluplne dali pouzit pri nasej analyze...rozhodla som sa pre: 
+
+-> Veh_type1, pretoze podla mojho nazoru sa soferi mozu spravat inak vo svojich vlastnych autach a inak v sluzobnych ktore im v podstate nepatria...
+
+-> Construct_year, pretoze od roku vyroby moze zavisiet v akom stave auto je po technickej stranke, ci ma napr elektroniku a alarmy ktore by sofera upozornili pred bliziacim sa nebezpecenstom, zaroven casom auto straca na svojej hodnote, preto ak spravi nehodu tak vyplatena suma bude pri starom aute bude ovela nizsia (ak nie je to nejaky vzacny typ) ako pri novom
+
+
+_ Veh type1 _
+
+```{r}
+library(ggplot2)
+dt_pol_w_claims %>% 
+  ggplot(aes(y = Burning_Cost, x = Veh_type1)) + 
+  geom_jitter()
+```
+```{r}
+levels(dt_pol_w_claims$Veh_type1)
+```
+na zaklade obrazka vidime, ze najvacsie burning cost maju typy vozidiel Private car (maju najviac dat a zaroven mozeme povedat ze vyplacaju vacsie skody oproti ostatnym no nevieme to este vyjadrit numericky), commercial car <3100 kg a <3500kg, driving school car a driving school motorcycle.
+ostatne typy maju velmi nizke ktore sa nedaju interpretovat a zaroven je v nich aj celkom malo dat
+
+```{r}
+dt_pol_w_claims %>% 
+  group_by(Veh_type1) %>% 
+  summarise(BC_avg = mean(Burning_Cost, na.rm  = TRUE),
+            BC_median = median(Burning_Cost, na.rm = TRUE),
+            cnt = n()) %>% 
+  arrange(desc(BC_avg))
+```
+na zaklade priemeru burning cost mozeme povedat, ze najrizikovejsie sa zdaju byt skupiny taxi a motorcycle, co moze byt protichodne s predcadzajucim grafom, kde sa nam zdala najrizikovejsia skupina private car, no tento nizky priemer mohlo sposobit to, ze tam bolo asi velmi vela nizkych hodnot burning costov, co vyrazne znizilo priemer 
+
+
+```{r}
+library(ggplot2)
+dt_pol_w_claims %>% 
+  ggplot(aes(y = Burning_Cost, x = Veh_type1)) + 
+  geom_boxplot() +
+  ylim(0, 100)
+```
+z tohto grafu vidime, ze tam velmi vela outlierov skoro pri kazdom type...uvidime co na to povie predikcia
+
+
+_ Construct year _
+
+```{r}
+library(ggplot2)
+dt_pol_w_claims %>% 
+  ggplot(aes(y = Burning_Cost, x = Construct_year)) + 
+  geom_jitter()
+```
+z tohto grafu mozeme vidiet, ze najvyssie hodnoty pre burning cost su zhruba od roku 2007, pri starsich vozidlach su nizsie, co moze byt sposobene tym, ze auta casom stracaju hodnotu a teda suma vyplacana po nehode bude ovela nizsia
+zaroven ludia nie su ochotni si poistit stare auto pokial sa nejedna o nejake luxusnejsie, ktore by malo aj v tomto obdobi velku hodnotu alebo ak k svojmu autu maju napr taky citovy vztah, ze sa im ho oplati tak ci tak poistit :D
+z tohto grafu nevieme takto odhadnut, ktore auta by mohli byt najviac rizikove
+
+```{r}
+dt_pol_w_claims %>% 
+  group_by(Construct_year) %>% 
+  summarise(BC_avg = mean(Burning_Cost, na.rm  = TRUE),
+            BC_median = median(Burning_Cost, na.rm = TRUE),
+            cnt = n()) %>% 
+  arrange(desc(BC_avg))
+```
+z tejto tabulky vyplyva, ze najvyssi burning cost maju auta vyrobene v r. 1997, co je dost skresleny udaj nakolko mame velmi malo dat a aj jedna alebo dve vysoke hodnoty nam to vedia takto skreslit
+rok vyroby 2011 ma druhy najvyssi burning cost...k tomuto roku vyroby mame aj dost dat, takze auta vyrobene v roku 2011 mozeme povazovat za dost rizikove (no stale to nevieme s urcitostou povedat)
+
+```{r}
+dt_pol_w_claims[, 17] <- as.factor(dt_pol_w_claims[, 17])
+dt_pol_w_claims %>% 
+  ggplot(aes(y = Burning_Cost, x = Construct_year)) + 
+  geom_boxplot() +
+  ylim(0, 100)
+```
+aj tu mame dost vela outlierov (rovnako ako pri veh_type1), preto si myslim ze pri tolkych outlieroch v oboch pripadoch nas model nebude prediktivny,no najprv si to skusime namodelovat skor ako vyvodime zavery :D
+
+
+```{r}
+model1 <- glm(data = dt_pol_w_claims %>% filter(Burning_Cost != 0, Burning_Cost < 100),
+              formula = Burning_Cost ~ Veh_type1 + Construct_year,
+              family = Gamma())
+
+summary(model1)
+```
+z modelu vidime, ze ani jeden rok pri Construct_year nie je vobec signifikantny, takze kedy auto bolo vyrobene ma velmi maly, takmer zanedbatelny vplyv na to ci je rizikove alebo nie
+jedine premenne ktore nam model vyhodil ako signifikantne su Veh_type1commercial car <3100 kg, Veh_type1commercial car <3500 kg a Veh_type1driving school car 
+
+osobne si myslim, ze tento model nie je prediktivny, chcelo by to viac faktorov, napr sa pozriet na vek vodicov, ci uz niekedy burali alebo nie,... co by spravilo nas model bohatsi, popripade spravit viacero modelov, ktore by pozostavali z roznych kombinacii faktorov a porovnat ich na zaklade nejakeho informacneho kriteria
+
+
+
