@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r, include=FALSE}
 library(dplyr)
 # load data, this are data from Lesson 5 where we prepared Claims with Policies into one dataset
-dt_pol_w_claims <- readRDS("./Data/lesson6_dt_pol_w_claims.rds")
+dt_pol_w_claims <- readRDS("C:\\GeneralInsurance_Class\\Data\\lesson6_dt_pol_w_claims.rds")
 set.seed(58742) # to fix randomizer
 ind <- sample(2, nrow(dt_pol_w_claims), replace=TRUE, prob=c(0.80, 0.20)) # generate random indicator to split by
 
@@ -38,7 +38,11 @@ This was the very basic glm model we fit in the last lesson.
 model1 <- glm(data = dt_pol_w_claims,
               formula = Burning_Cost ~ Veh_type2,
               family = Gamma())
+summary(model1)
 ```
+pouzili sme vsetky data takze nemame co validovat
+
+
 
 We trained it on full dataset, which does not go with our methodology. Lets fit it on __training__ part of data.
 
@@ -47,16 +51,26 @@ We trained it on full dataset, which does not go with our methodology. Lets fit 
 model1a <- glm(data = train,
               formula = Burning_Cost ~ Veh_type2,
               family = Gamma())
+summary(model1a)
 ```
+
+
+prebehnem validacne data cez model 
+
 
 ```{r}
 # lets make prediciton on validation dataset and evaluate model
 prediction <- predict(model1a, val, type = "response")
 ```
 
+
+
 ```{r}
 mse(prediction, val$Burning_Cost)
 ```
+
+
+
 
 Okay, we know, that by metric we are using to improve model it means decreasing MSE metric. Now we will try different approaches to achieve it.
 
