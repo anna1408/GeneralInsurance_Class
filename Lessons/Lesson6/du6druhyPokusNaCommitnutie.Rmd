@@ -1,0 +1,183 @@
+---
+title: "du6"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+_Domaca uloha 6_
+
+Zobrala som si data z poslednej hodiny
+
+
+```{r, include=FALSE}
+library(dplyr)
+dt_pol_w_claims <- readRDS("C:\\GeneralInsurance_Class\\Data\\lesson6_dt_pol_w_claims.rds")
+set.seed(58742) 
+ind <- sample(2, nrow(dt_pol_w_claims), replace=TRUE, prob=c(0.80, 0.20)) 
+
+dt_pol_w_claims <- mutate(dt_pol_w_claims,
+                data_status = ifelse(ind == 1, 
+                                     "Training",
+                                     ifelse(ind == 2, 
+                                            "Validation", 
+                                            "Unseen")
+                )
+)
+
+
+train <- dt_pol_w_claims %>% filter(data_status == "Training")
+val <- dt_pol_w_claims %>% filter(data_status == "Validation")
+
+mse <- function(prediction, actual){
+  return(sum((prediction-actual)^2, na.rm = TRUE)/length(prediction))
+}
+```
+
+na predoslej domacej ulohe som robila nasledovny model
+
+```{r}
+model1 <- glm(data = dt_pol_w_claims %>% filter(Burning_Cost != 0, Burning_Cost < 100),
+              formula = Burning_Cost ~ Veh_type1 + Construct_year,
+              family = Gamma())
+
+summary(model1)
+```
+
+spravim si ho opat len na trenovacich datach a pozriem sa na chybu 
+
+```{r}
+model11 <- glm(data = train %>% filter(Burning_Cost != 0, Burning_Cost < 100),
+              formula = Burning_Cost ~ Veh_type1 + Construct_year,
+              family = Gamma())
+
+summary(model11)
+
+mse(predict(model11, train, type = "response"), train$Burning_Cost) 
+mse(predict(model11, val, type = "response"), val$Burning_Cost) 
+
+```
+chyba pre trenovacie data = 191,7959 a pre val. data =288,6734
+
+
+vyskusam este pridat jednu premennu a to D_age
+
+```{r}
+model2 <- glm(data = train %>% filter(Burning_Cost != 0, Burning_Cost < 100),
+              formula = Burning_Cost ~ Veh_type1 + Construct_year + D_age,
+              family = Gamma())
+
+summary(model2)
+
+mse(predict(model2, train, type = "response"), train$Burning_Cost) 
+mse(predict(model2, val, type = "response"), val$Burning_Cost) 
+
+
+```
+
+
+pridanim dalsej premennej D_age, ktora mi hovori o veku vodicov, sa mi chyba aj pre train aj pre val znizila, takze to pomohlo mojmu modelu
+mse train = 190,6656
+mse val = 283,5531
+
+
+teraz si skusime vylepsit nas model:
+- pri construct_year si auta , ktore boli vyrobene pred rokom si priradime k roku 2002
+- vek vodicov nad 75 priradime k 75, a pod 25 priradime k 25
+- pri type vozidiel si pozgrupujeme podobne typy ako napr dame spolu 
+    - "taxi category A" a "taxi", 
+    - "private car" a "private truck"  
+    - "driving school motorcycle" a "driving school car", 
+    - "commercial car <3100 kg" a  "commercial car <3500 kg", 
+    - "truck over 20 tn","truck up to 10 tn" a "truck 10 to 20 tn"
+    - a vsetky ostatne dame tiez dokopy
+
+```{r}
+levels(dt_pol_w_claims$Veh_type1)
+
+```
+
+```{r}
+train1 <- train %>% 
+  mutate(Construct_year = ifelse(Construct_year <= 2002, 2002, Construct_year))
+   
+train1 <- train1 %>% 
+  mutate(D_age = ifelse(D_age <= 25, 25, D_age))
+
+train1 <- train1 %>% 
+  mutate(D_age = ifelse(D_age >= 75, 75, D_age))
+
+
+train1 <- train1 %>% mutate(Veh_type1 = ifelse(as.character(Veh_type1) == 'commercial car <3100 kg' | as.character(Veh_type1) == 'commercial car <3500 kg', 'commercial car', as.character(Veh_type1)))
+val1 <- val %>% mutate(Veh_type1 = ifelse(as.character(Veh_type1) == 'commercial car <3100 kg' | as.character(Veh_type1) == 'commercial car <3500 kg', 'commercial car', as.character(Veh_type1)))
+
+train1 <- train1 %>% mutate(Veh_type1 = ifelse(as.character(Veh_type1) == 'driving school motorcycle' | as.character(Veh_type1) == 'driving school car', 'driving school', as.character(Veh_type1)))
+val1 <- val1 %>% mutate(Veh_type1 = ifelse(as.character(Veh_type1) == 'driving school motorcycle' | as.character(Veh_type1) == 'driving school car', 'driving school', as.character(Veh_type1)))
+
+train1 <- train1 %>% mutate(Veh_type1 = ifelse(as.character(Veh_type1) == 'private car' | as.character(Veh_type1) == 'private truck', 'private', as.character(Veh_type1)))
+val1 <- val1 %>% mutate(Veh_type1 = ifelse(as.character(Veh_type1) == 'private car' | as.character(Veh_type1) == 'private truck', 'private', as.character(Veh_type1)))
+
+train1 <- train1 %>% mutate(Veh_type1 = ifelse(as.character(Veh_type1) == 'taxi category A' | as.character(Veh_type1) == 'taxi', 'taxi', as.character(Veh_type1)))
+val1 <- val1 %>% mutate(Veh_type1 = ifelse(as.character(Veh_type1) == 'taxi category A' | as.character(Veh_type1) == 'taxi', 'taxi', as.character(Veh_type1)))
+
+train1 <- train1 %>% mutate(Veh_type1 = ifelse(as.character(Veh_type1) == 'truck over 20 tn' | as.character(Veh_type1) == 'truck up to 10 tn' | as.character(Veh_type1) == 'truck 10 to 20 tn', 'truck', as.character(Veh_type1)))
+val1 <- val1 %>% mutate(Veh_type1 = ifelse(as.character(Veh_type1) == 'truck over 20 tn' | as.character(Veh_type1) == 'truck up to 10 tn' | as.character(Veh_type1) == 'truck 10 to 20 tn', 'truck', as.character(Veh_type1)))
+
+train1 <- train1 %>% mutate(Veh_type1 = ifelse(as.character(Veh_type1) == 'agriculture tractor' | as.character(Veh_type1) == 'motorcycle'  | as.character(Veh_type1) == 'tow-car'  | as.character(Veh_type1) == 'articulated vehicle'  | as.character(Veh_type1) == 'other', 'other', as.character(Veh_type1)))
+val1 <- val1 %>% mutate(Veh_type1 = ifelse(as.character(Veh_type1) == 'agriculture tractor' | as.character(Veh_type1) == 'motorcycle'  | as.character(Veh_type1) == 'tow-car'  | as.character(Veh_type1) == 'articulated vehicle'  | as.character(Veh_type1) == 'other', 'other', as.character(Veh_type1)))
+
+      
+model3 <- glm(data = train1,
+              formula = Burning_Cost ~ Veh_type1 + Construct_year+D_age,
+              family = Gamma())
+summary(model3)
+
+mse(predict(model3, train1, type = "response"), train1$Burning_Cost) 
+mse(predict(model3, val1, type = "response"), val1$Burning_Cost) 
+
+
+```
+takymto pristupom sa mi model nezlepsil, skor naopak, lebo chyba mi narastla na mseTRAIN=194,1444 a mseVAL=285,327...problem je asi v nespravnom zgrupovani
+
+pozrieme sa preto este raz na tento model, ale s tym, ze nebudeme zrupovat typy vozidiel
+```{r}
+train2 <- train %>% 
+  mutate(Construct_year = ifelse(Construct_year <= 2002, 2002, Construct_year))
+   
+train2 <- train2 %>% 
+  mutate(D_age = ifelse(D_age <= 25, 25, D_age))
+
+train2 <- train2 %>% 
+  mutate(D_age = ifelse(D_age >= 75, 75, D_age))
+
+      
+model4 <- glm(data = train2,
+              formula = Burning_Cost ~ Veh_type1 + Construct_year + D_age,
+              family = Gamma())
+summary(model4)
+
+mse(predict(model4, train2, type = "response"), train2$Burning_Cost) 
+mse(predict(model4, val, type = "response"), val$Burning_Cost) 
+
+```
+vidime, ze chyby su velmi podobne ako v modeli 2, takze nase tusenie, ze sme zgrupovali nespravne sa potvrdilo. zaroven ani priradovanie rokov pri construct year mensich ako 2002 k roku 2002, a podobne aj D_age nam nijako nezlepsilo model, ale nemozeme povedat, ze by ho aj zhorsilo nakolko chyby sa lisili minimalne chyby: mseTRAIN=190,6212 a mseVAL=284,0095
+
+vyskusame pridat do tohto posledneho modelu4 este jednu premennu a to Customer_Type
+```{r}
+model5 <- glm(data = train2,
+              formula = Burning_Cost ~ Veh_type1 + Construct_year + D_age + Customer_Type,
+              family = Gamma())
+summary(model4)
+
+mse(predict(model5, train2, type = "response"), train2$Burning_Cost) 
+mse(predict(model5, val, type = "response"), val$Burning_Cost) 
+```
+ked sa pozrieme opat na chyby tak mseTRAIN=190,6974 a mseVAL=283,8125, čo su opat velmi blizke hodnoty k chybam modelu4 a modelu2
+
+
+
+Zaver: k mojmu povodnemu modelu, ktory pozostaval z Veh_type1 a Construct_year pomohlo len pridanie  dalsej premennej D_age...zgrupovanie, priradovanie hodnot k dalsim a ani pridanie dalsej premennej mu nijako vyrazne nepomohli
+
+
